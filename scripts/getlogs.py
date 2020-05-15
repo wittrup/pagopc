@@ -4,8 +4,8 @@
 
 
 from ftplib import FTP
-from os import getcwd, mkdir
-from os.path import join as pathjoin, exists, isabs as pathisabs, dirname, abspath, split as pathsplit
+from os import getcwd, makedirs, remove as delfile
+from os.path import join as pathjoin, exists, isabs as pathisabs, dirname, abspath, split as pathsplit, getsize
 import argparse
 
 
@@ -19,6 +19,7 @@ def ftpcopy(filename, local_filename):
     file = open(local_filename, 'wb')
     ftp.retrbinary('RETR ' + filename, file.write)
     file.close()
+
 
 def splitall(path):
     allparts = []
@@ -61,20 +62,29 @@ if __name__ == '__main__':
         if item not in path:
             path = pathjoin(path, item)
     if not exists(path):
-        mkdir(path)
+        makedirs(path)
 
-    print('Copying from', ftp.pwd())
+    print('Copying from ' + ftp.pwd())
     i = 0
-    for filename in ftp.nlst(): # get filenames within the directory
-        try:
-            local_filename = pathjoin(path, filename)
-            file = open(local_filename, 'wb')
-            ftp.retrbinary('RETR ' + filename, file.write)
-            file.close()
-        except:
-            print('FAILED', filename)
-        finally:
-            i += 1
-            print(filename)
+    fails = []
+    files = sorted(ftp.nlst())
+    last = len(files) - 2  # to copy last file
+    for n, filename in enumerate(files):  # get filenames within the directory
+        local_filename = pathjoin(path, filename)
+        if n > last or (not exists(local_filename)) or (exists(local_filename) and not getsize(local_filename)):
+            try:
+                file = open(local_filename, 'wb')
+                ftp.retrbinary('RETR ' + filename, file.write)
+                i += 1
+                print(filename)
+            except Exception as e:
+                file.close()
+                if exists(local_filename):
+                    delfile(local_filename)
+                fails.append(('FAILED', filename, str(e)))
+            finally:
+                file.close()
     print("        %i file(s) copied." % i)
-    ftp.quit() # This is the “polite” way to close a connection
+    ftp.quit()  # This is the “polite” way to close a connection
+    for fail in fails:
+        print(fail)
